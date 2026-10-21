@@ -1,0 +1,62 @@
+# SHJumpPads - plaques de saut
+# Les plaques sont stockées dans jumppads.yml (même format que l'ancien plugin JumpPads,
+# qui est importé automatiquement au premier démarrage s'il est présent).
+
+prefix: '&7&l« &a&lSH &8&l» &7'
+
+# Puissance maximale autorisée à la création (sauf permission shjumppads.maxpower.bypass)
+max-power: 50
+# Sans direction fixée sur la plaque, le joueur part dans le sens où il marche
+launch-in-walking-direction: true
+# Bloque les téléportations (ender pearl, chorus) pendant le vol
+block-teleporting: true
+
+trail:
+  enabled: true
+  # Couleur de la particule DUST (nom de couleur ou hex #RRGGBB)
+  color: 'red'
+  density: 1
+
+sound:
+  enabled: true
+  # true : tout le monde entend le son, false : seulement le joueur lancé
+  world: true
+  # Clé de son Minecraft (ex : entity.wither.shoot)
+  name: 'entity.wither.shoot'
+  volume: 1.0
+  pitch: 1.0
+
+# Cercle de particules qui tourne au-dessus de chaque plaque
+visualizer:
+  enabled: true
+  particle: DUST
+  color: 'red'
+  radius: 0.5
+  rotation-speed: 2
+
+launch-effect:
+  enabled: true
+  # Valeur de org.bukkit.Effect (EXPLOSION_LARGE n'existe plus depuis la 1.20.5)
+  effect: END_GATEWAY_SPAWN
+
+# Supprime la plaque quand son bloc est cassé
+clean-up: true
+
+messages:
+  no-permission: '&7Vous n''avez pas la permission.'
+  player-only: '&7Commande réservée aux &cjoueurs&7.'
+  usage: '&7Utilisation : &e/shjp <create|delete|set|info|list|reload>'
+  not-a-pad: '&7Le bloc visé n''est &cpas une plaque de saut&7.'
+  invalid-target: '&7Une plaque de saut se pose sur une &cplaque de pression &7ou un &cbloc de slime&7.'
+  already-exists: '&7Il y a déjà une plaque de saut &cici&7.'
+  invalid-number: '&c{value} &7n''est pas un nombre valide.'
+  max-power: '&7Vous ne pouvez pas dépasser une puissance de &c{max}&7.'
+  created: '&7Plaque de saut &acréée &7(puissance &a{power}&7, angle &a{angle}°&7).'
+  deleted: '&7Plaque de saut &asupprimée&7.'
+  broken: '&7Plaque de saut &csupprimée &7(bloc cassé).'
+  set: '&7Valeur &a{key} &7définie sur &a{value}&7.'
+  set-usage: '&7Utilisation : &e/shjp set <power|angle|direction|particle|permission> <valeur|none>'
+  reloaded: '&7Configuration &arechargée &7({count} plaques).'
+  list-header: '&7Plaques de saut (&e{count}&7) :'
+  list-line: '&8• &7{world} &e{x} {y} {z} &8(&7puissance {power}, angle {angle}°&8)'
+  info: '&7Plaque &e{world} {x} {y} {z}&7 : bloc &e{plate}&7, puissance &e{power}&7, angle &e{angle}°&7, direction &e{direction}&7, particule &e{particle}&7.'

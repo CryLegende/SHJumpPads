@@ -1,0 +1,30 @@
+name: SHJumpPads
+version: '${project.version}'
+main: org.Cry_Legende.sHJumpPads.SHJumpPads
+api-version: '1.21'
+author: Cry_Legende
+description: Plaques de saut (remplace JumpPads, reprend son fichier jumppads.yml).
+
+commands:
+  shjumppads:
+    description: Gestion des plaques de saut.
+    usage: /<command> <create|delete|set|info|list|reload>
+    aliases: [shjp]
+
+permissions:
+  shjumppads.use:
+    description: Utiliser les plaques de saut.
+    default: true
+  shjumppads.admin:
+    description: Toutes les commandes de gestion.
+    default: op
+    children:
+      shjumppads.create: true
+      shjumppads.delete: true
+      shjumppads.set: true
+      shjumppads.info: true
+      shjumppads.list: true
+      shjumppads.reload: true
+  shjumppads.maxpower.bypass:
+    description: Dépasser la puissance maximale à la création.
+    default: op
