@@ -15,6 +15,7 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
@@ -39,6 +40,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -55,9 +57,16 @@ public class SHJumpPads extends JavaPlugin implements Listener, CommandExecutor,
     private static final int MAX_FLIGHT_TICKS = 400;
 
     private final Map<String, JumpPad> pads = new HashMap<>();
-    private final Set<String> worldsWithPads = new HashSet<>();
+    // Cases (clé de bloc) où se trouve une plaque, par monde : filtre rapide pour PlayerMoveEvent
+    private final Map<String, Set<Long>> padCells = new HashMap<>();
     private final Set<UUID> launched = new HashSet<>();
     private final Set<UUID> fallProtected = new HashSet<>();
+    // Joueurs à qui le plugin a donné allowFlight pour la durée du vol
+    private final Set<UUID> flightGranted = new HashSet<>();
+    // Plaques illisibles de jumppads.yml, réécrites telles quelles à la sauvegarde
+    private final Map<String, Object> unreadablePads = new HashMap<>();
+    // Faux si jumppads.yml n'a pas pu être lu : on ne le réécrit pas
+    private boolean padsReadable = true;
     private File padsFile;
 
     private String prefix;
@@ -99,6 +108,14 @@ public class SHJumpPads extends JavaPlugin implements Listener, CommandExecutor,
 
     @Override
     public void onDisable() {
+        for (UUID uuid : flightGranted) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null && player.getGameMode() != GameMode.CREATIVE && player.getGameMode() != GameMode.SPECTATOR) {
+                player.setFlying(false);
+                player.setAllowFlight(false);
+            }
+        }
+        flightGranted.clear();
         launched.clear();
         fallProtected.clear();
     }
@@ -154,29 +171,69 @@ public class SHJumpPads extends JavaPlugin implements Listener, CommandExecutor,
     }
 
     private void loadPads() {
+        YamlConfiguration yaml = new YamlConfiguration();
+        if (padsFile.exists()) {
+            try {
+                yaml.load(padsFile);
+            } catch (IOException | InvalidConfigurationException e) {
+                // loadConfiguration rendrait une configuration vide : la sauvegarde suivante effacerait toutes les plaques
+                padsReadable = false;
+                getLogger().severe("jumppads.yml illisible, les plaques ne seront pas sauvegardées pour ne pas l'écraser : " + e.getMessage());
+                return;
+            }
+        }
+        padsReadable = true;
         pads.clear();
-        worldsWithPads.clear();
-        ConfigurationSection root = YamlConfiguration.loadConfiguration(padsFile).getConfigurationSection("JumpPads");
+        padCells.clear();
+        unreadablePads.clear();
+        ConfigurationSection root = yaml.getConfigurationSection("JumpPads");
         if (root == null) {
             return;
         }
         for (String key : root.getKeys(false)) {
             JumpPad pad = JumpPad.fromConfig(key, root.getConfigurationSection(key));
             if (pad == null) {
-                getLogger().warning("Plaque illisible ignorée : " + key);
+                getLogger().warning("Plaque illisible ignorée (gardée telle quelle dans jumppads.yml) : " + key);
+                unreadablePads.put(key, plain(root.get(key)));
                 continue;
             }
             pads.put(pad.key(), pad);
-            worldsWithPads.add(pad.world);
+            indexPad(pad);
         }
     }
 
+    // Sections converties en Map : une ConfigurationSection posée telle quelle dans une autre configuration se sauve mal
+    private static Object plain(Object value) {
+        if (value instanceof ConfigurationSection section) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            for (String key : section.getKeys(false)) {
+                map.put(key, plain(section.get(key)));
+            }
+            return map;
+        }
+        return value;
+    }
+
+    private void indexPad(JumpPad pad) {
+        padCells.computeIfAbsent(pad.world, world -> new HashSet<>()).add(cell(pad.x, pad.y, pad.z));
+    }
+
+    // Clé d'une case : 26 bits pour x et z, 12 bits pour y
+    private static long cell(int x, int y, int z) {
+        return ((long) x & 0x3FFFFFF) << 38 | ((long) z & 0x3FFFFFF) << 12 | (y & 0xFFF);
+    }
+
     private void savePads() {
+        if (!padsReadable) {
+            getLogger().warning("jumppads.yml n'a pas pu être lu : sauvegarde ignorée.");
+            return;
+        }
         YamlConfiguration yaml = new YamlConfiguration();
         ConfigurationSection root = yaml.createSection("JumpPads");
         for (JumpPad pad : pads.values()) {
             pad.save(root.createSection(pad.key()));
         }
+        unreadablePads.forEach(root::set);
         try {
             yaml.save(padsFile);
         } catch (IOException e) {
@@ -190,7 +247,13 @@ public class SHJumpPads extends JavaPlugin implements Listener, CommandExecutor,
     public void onMove(PlayerMoveEvent event) {
         Player player = event.getPlayer();
         Location to = event.getTo();
-        if (launched.contains(player.getUniqueId()) || !worldsWithPads.contains(to.getWorld().getName())) {
+        Set<Long> cells = padCells.get(to.getWorld().getName());
+        if (cells == null || launched.contains(player.getUniqueId())) {
+            return;
+        }
+        // Sort tout de suite si ni la case du joueur ni celle du dessous ne porte de plaque
+        int bx = to.getBlockX(), by = to.getBlockY(), bz = to.getBlockZ();
+        if (!cells.contains(cell(bx, by, bz)) && !cells.contains(cell(bx, by - 1, bz))) {
             return;
         }
         if (player.getGameMode() == GameMode.SPECTATOR || player.isFlying() || player.isInsideVehicle()) {
@@ -231,6 +294,7 @@ public class SHJumpPads extends JavaPlugin implements Listener, CommandExecutor,
         boolean grantedFlight = !player.getAllowFlight();
         if (grantedFlight) {
             player.setAllowFlight(true);
+            flightGranted.add(uuid);
         }
         playLaunchFeedback(player);
         new LaunchTask(player, velocity, resolveTrail(pad), grantedFlight).runTaskTimer(this, 0L, 1L);
@@ -277,6 +341,7 @@ public class SHJumpPads extends JavaPlugin implements Listener, CommandExecutor,
             cancel();
             UUID uuid = player.getUniqueId();
             launched.remove(uuid);
+            flightGranted.remove(uuid);
             if (grantedFlight && player.isOnline()
                 && player.getGameMode() != GameMode.CREATIVE && player.getGameMode() != GameMode.SPECTATOR) {
                 player.setFlying(false);
@@ -335,6 +400,7 @@ public class SHJumpPads extends JavaPlugin implements Listener, CommandExecutor,
         UUID uuid = event.getPlayer().getUniqueId();
         launched.remove(uuid);
         fallProtected.remove(uuid);
+        flightGranted.remove(uuid);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -470,7 +536,7 @@ public class SHJumpPads extends JavaPlugin implements Listener, CommandExecutor,
         }
         pad.owners.add(player.getUniqueId().toString());
         pads.put(key, pad);
-        worldsWithPads.add(pad.world);
+        indexPad(pad);
         savePads();
         send(player, "created", "{power}", fmt(power), "{angle}", fmt(angle));
     }
