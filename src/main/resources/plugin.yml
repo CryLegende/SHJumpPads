@@ -15,16 +15,34 @@ permissions:
   shjumppads.use:
     description: Utiliser les plaques de saut.
     default: true
+  shjumppads.bypass.maxpower:
+    description: Dépasser la puissance maximale (max-power) à la création et à la modification d'une plaque.
+    default: op
   shjumppads.admin:
-    description: Toutes les commandes de gestion.
+    description: Toute l'administration de SHJumpPads.
     default: op
     children:
-      shjumppads.create: true
-      shjumppads.delete: true
-      shjumppads.set: true
-      shjumppads.info: true
-      shjumppads.list: true
-      shjumppads.reload: true
-  shjumppads.maxpower.bypass:
-    description: Dépasser la puissance maximale à la création.
+      shjumppads.admin.create: true
+      shjumppads.admin.delete: true
+      shjumppads.admin.set: true
+      shjumppads.admin.info: true
+      shjumppads.admin.list: true
+      shjumppads.admin.reload: true
+  shjumppads.admin.create:
+    description: Créer une plaque de saut (/shjumppads create).
+    default: op
+  shjumppads.admin.delete:
+    description: Supprimer une plaque de saut (/shjumppads delete).
+    default: op
+  shjumppads.admin.set:
+    description: Modifier une plaque de saut (/shjumppads set).
+    default: op
+  shjumppads.admin.info:
+    description: Afficher les réglages d'une plaque de saut (/shjumppads info).
+    default: op
+  shjumppads.admin.list:
+    description: Lister les plaques de saut (/shjumppads list).
+    default: op
+  shjumppads.admin.reload:
+    description: Recharger la configuration (/shjumppads reload).
     default: op

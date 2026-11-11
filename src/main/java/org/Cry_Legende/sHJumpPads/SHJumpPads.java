@@ -34,6 +34,9 @@ import org.bukkit.util.Vector;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
@@ -69,7 +72,7 @@ public class SHJumpPads extends JavaPlugin implements Listener, CommandExecutor,
     private boolean padsReadable = true;
     private File padsFile;
 
-    private String prefix;
+    private volatile YamlConfiguration messages = new YamlConfiguration();
     private double maxPower;
     private boolean launchWalking;
     private boolean blockTeleporting;
@@ -93,6 +96,13 @@ public class SHJumpPads extends JavaPlugin implements Listener, CommandExecutor,
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        migrateMessages();
+        try {
+            messages = readMessages();
+        } catch (IOException | InvalidConfigurationException e) {
+            getLogger().warning("messages.yml illisible, textes par défaut utilisés : " + firstLine(e));
+            messages = defaultMessages();
+        }
         loadConfiguration();
         padsFile = new File(getDataFolder(), "jumppads.yml");
         importLegacyPads();
@@ -120,12 +130,91 @@ public class SHJumpPads extends JavaPlugin implements Listener, CommandExecutor,
         fallProtected.clear();
     }
 
-    // ------------------------------------------------------------------ configuration et données
+    // ------------------------------------------------------------------ configuration, messages et données
+
+    /**
+     * Les textes étaient dans prefix et messages: de config.yml (le préfixe s'ajoutait devant chaque texte). Au premier
+     * démarrage sans messages.yml, le fichier est créé avec les textes de ce serveur (préfixe compris), complétés par
+     * les valeurs du jar. config.yml n'est plus lu pour les textes ensuite. usage et set-usage citent la commande : ils
+     * viennent toujours du jar.
+     */
+    private void migrateMessages() {
+        File file = new File(getDataFolder(), "messages.yml");
+        if (file.exists()) {
+            return;
+        }
+        YamlConfiguration created = defaultMessages();
+        ConfigurationSection old = getConfig().getConfigurationSection("messages");
+        if (old != null) {
+            String oldPrefix = getConfig().getString("prefix", "");
+            for (String key : old.getKeys(false)) {
+                if (!key.equals("usage") && !key.equals("set-usage") && old.isString(key)) {
+                    created.set(key, oldPrefix + old.getString(key));
+                }
+            }
+        }
+        try {
+            getDataFolder().mkdirs();
+            created.save(file);
+        } catch (IOException e) {
+            getLogger().warning("messages.yml non créé : " + e.getMessage());
+        }
+    }
+
+    private YamlConfiguration defaultMessages() {
+        try (InputStream in = getResource("messages.yml")) {
+            if (in != null) {
+                return YamlConfiguration.loadConfiguration(new InputStreamReader(in, StandardCharsets.UTF_8));
+            }
+        } catch (IOException e) {
+            getLogger().warning("messages.yml du jar illisible : " + e.getMessage());
+        }
+        return new YamlConfiguration();
+    }
+
+    /** messages.yml du serveur ; les clés absentes retombent sur le texte du jar. */
+    private YamlConfiguration readMessages() throws IOException, InvalidConfigurationException {
+        YamlConfiguration yaml = new YamlConfiguration();
+        yaml.load(new File(getDataFolder(), "messages.yml"));
+        yaml.setDefaults(defaultMessages());
+        return yaml;
+    }
+
+    private static String firstLine(Exception e) {
+        String text = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+        int end = text.indexOf('\n');
+        return (end < 0 ? text : text.substring(0, end)).trim();
+    }
+
+    /**
+     * Relit config.yml et messages.yml. Si l'un des deux a une erreur de syntaxe, rien n'est appliqué : renvoie le
+     * fichier et la première ligne de l'erreur, null quand tout est rechargé. jumppads.yml n'est pas relu (les plaques
+     * en mémoire font foi, chaque commande les sauvegarde), sauf s'il était illisible au démarrage : on retente alors.
+     */
+    private String[] reload() {
+        File configFile = new File(getDataFolder(), "config.yml");
+        try {
+            new YamlConfiguration().load(configFile);
+        } catch (IOException | InvalidConfigurationException e) {
+            return new String[]{configFile.getName(), firstLine(e)};
+        }
+        YamlConfiguration newMessages;
+        try {
+            newMessages = readMessages();
+        } catch (IOException | InvalidConfigurationException e) {
+            return new String[]{"messages.yml", firstLine(e)};
+        }
+        messages = newMessages;
+        loadConfiguration();
+        if (!padsReadable) {
+            loadPads();
+        }
+        return null;
+    }
 
     private void loadConfiguration() {
         reloadConfig();
         FileConfiguration c = getConfig();
-        prefix = c.getString("prefix", "&7&l« &a&lSH &8&l» &7");
         maxPower = c.getDouble("max-power", 50);
         launchWalking = c.getBoolean("launch-in-walking-direction", true);
         blockTeleporting = c.getBoolean("block-teleporting", true);
@@ -444,33 +533,54 @@ public class SHJumpPads extends JavaPlugin implements Listener, CommandExecutor,
 
     // ------------------------------------------------------------------ commandes
 
+    // Sous-commandes dans l'ordre d'affichage de la ligne d'usage
+    private static final List<String> SUBCOMMANDS = List.of("create", "delete", "set", "info", "list", "reload");
+
+    /** Sous-commandes que l'expéditeur a le droit d'utiliser. */
+    private List<String> allowedSubcommands(CommandSender sender) {
+        List<String> allowed = new ArrayList<>();
+        for (String sub : SUBCOMMANDS) {
+            if (sender.hasPermission("shjumppads.admin." + sub)) {
+                allowed.add(sub);
+            }
+        }
+        return allowed;
+    }
+
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        List<String> allowed = allowedSubcommands(sender);
+        if (allowed.isEmpty()) {
+            send(sender, "no-permission");
+            return true;
+        }
         String sub = args.length == 0 ? "" : args[0].toLowerCase(Locale.ROOT);
+        if (!allowed.contains(sub)) {
+            send(sender, "usage", "{subs}", String.join("&7|&e", allowed));
+            return true;
+        }
         switch (sub) {
             case "reload" -> {
-                if (check(sender, "shjumppads.reload")) {
-                    loadConfiguration();
-                    loadPads();
+                String[] error = reload();
+                if (error != null) {
+                    send(sender, "reload-failed", "{file}", error[0], "{error}", error[1]);
+                } else {
                     send(sender, "reloaded", "{count}", String.valueOf(pads.size()));
                 }
             }
             case "list" -> {
-                if (check(sender, "shjumppads.list")) {
-                    send(sender, "list-header", "{count}", String.valueOf(pads.size()));
-                    pads.values().stream().limit(50).forEach(pad -> send(sender, "list-line",
-                        "{world}", pad.world, "{x}", String.valueOf(pad.x), "{y}", String.valueOf(pad.y),
-                        "{z}", String.valueOf(pad.z), "{power}", fmt(pad.power), "{angle}", fmt(pad.angle)));
-                }
+                send(sender, "list-header", "{count}", String.valueOf(pads.size()));
+                pads.values().stream().limit(50).forEach(pad -> send(sender, "list-line",
+                    "{world}", pad.world, "{x}", String.valueOf(pad.x), "{y}", String.valueOf(pad.y),
+                    "{z}", String.valueOf(pad.z), "{power}", fmt(pad.power), "{angle}", fmt(pad.angle)));
             }
-            case "create", "delete", "set", "info" -> {
-                if (!(sender instanceof Player player)) {
-                    send(sender, "player-only");
-                } else if (check(sender, "shjumppads." + sub)) {
+            default -> {
+                if (sender instanceof Player player) {
                     handleBlockCommand(player, sub, args);
+                } else {
+                    send(sender, "player-only");
                 }
             }
-            default -> send(sender, "usage");
         }
         return true;
     }
@@ -520,7 +630,7 @@ public class SHJumpPads extends JavaPlugin implements Listener, CommandExecutor,
         if (power == null || angle == null) {
             return;
         }
-        if (power > maxPower && !player.hasPermission("shjumppads.maxpower.bypass")) {
+        if (power > maxPower && !player.hasPermission("shjumppads.bypass.maxpower")) {
             send(player, "max-power", "{max}", fmt(maxPower));
             return;
         }
@@ -555,7 +665,7 @@ public class SHJumpPads extends JavaPlugin implements Listener, CommandExecutor,
                 if (v == null) {
                     return;
                 }
-                if (v > maxPower && !player.hasPermission("shjumppads.maxpower.bypass")) {
+                if (v > maxPower && !player.hasPermission("shjumppads.bypass.maxpower")) {
                     send(player, "max-power", "{max}", fmt(maxPower));
                     return;
                 }
@@ -595,12 +705,12 @@ public class SHJumpPads extends JavaPlugin implements Listener, CommandExecutor,
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            return StringUtil.copyPartialMatches(args[0], List.of("create", "delete", "set", "info", "list", "reload"), new ArrayList<>());
+            return StringUtil.copyPartialMatches(args[0], allowedSubcommands(sender), new ArrayList<>());
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("set")) {
+        if (args.length == 2 && args[0].equalsIgnoreCase("set") && sender.hasPermission("shjumppads.admin.set")) {
             return StringUtil.copyPartialMatches(args[1], List.of("power", "angle", "direction", "particle", "permission"), new ArrayList<>());
         }
-        if (args.length == 4 && args[0].equalsIgnoreCase("create")) {
+        if (args.length == 4 && args[0].equalsIgnoreCase("create") && sender.hasPermission("shjumppads.admin.create")) {
             return StringUtil.copyPartialMatches(args[3], List.of("auto", "here"), new ArrayList<>());
         }
         return Collections.emptyList();
@@ -610,14 +720,6 @@ public class SHJumpPads extends JavaPlugin implements Listener, CommandExecutor,
 
     private static boolean isPadMaterial(Material material) {
         return material == Material.SLIME_BLOCK || material.name().endsWith("_PRESSURE_PLATE");
-    }
-
-    private boolean check(CommandSender sender, String permission) {
-        if (sender.hasPermission(permission)) {
-            return true;
-        }
-        send(sender, "no-permission");
-        return false;
     }
 
     private Double parseDouble(CommandSender sender, String raw) {
@@ -634,11 +736,15 @@ public class SHJumpPads extends JavaPlugin implements Listener, CommandExecutor,
     }
 
     private void send(CommandSender sender, String key, String... replacements) {
-        String message = getConfig().getString("messages." + key, key);
+        // La forme à un argument lit aussi les valeurs par défaut du jar
+        String message = messages.getString(key);
+        if (message == null) {
+            message = key;
+        }
         for (int i = 0; i + 1 < replacements.length; i += 2) {
             message = message.replace(replacements[i], replacements[i + 1]);
         }
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', prefix + message));
+        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', message));
     }
 
     /**

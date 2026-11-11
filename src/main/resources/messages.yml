@@ -1,0 +1,25 @@
+# SHJumpPads - messages
+#
+# Variables entre {...} selon le message. Codes couleur &.
+
+no-permission: '&7&l« &c&lSH &8&l» &7Vous n''avez pas la &cpermission &7de faire ça.'
+player-only: '&7&l« &c&lSH &8&l» &7Commande réservée aux &cjoueurs&7.'
+# {subs} : les sous-commandes que l'expéditeur peut utiliser
+usage: '&7&l« &e&lSH &8&l» &7Utilisation : &e/shjumppads &7<&e{subs}&7>.'
+not-a-pad: '&7&l« &c&lSH &8&l» &7Le bloc visé n''est &cpas une plaque de saut&7.'
+invalid-target: '&7&l« &c&lSH &8&l» &7Une plaque de saut se pose sur une &cplaque de pression &7ou un &cbloc de slime&7.'
+already-exists: '&7&l« &c&lSH &8&l» &7Il y a déjà une plaque de saut &cici&7.'
+invalid-number: '&7&l« &c&lSH &8&l» &c{value} &7n''est pas un nombre valide.'
+max-power: '&7&l« &c&lSH &8&l» &7Vous ne pouvez pas dépasser une puissance de &c{max}&7.'
+created: '&7&l« &a&lSH &8&l» &7Plaque de saut &acréée &7(puissance &a{power}&7, angle &a{angle}°&7).'
+deleted: '&7&l« &a&lSH &8&l» &7Plaque de saut &asupprimée&7.'
+broken: '&7&l« &6&lSH &8&l» &7Plaque de saut &csupprimée &7(bloc cassé).'
+set: '&7&l« &a&lSH &8&l» &7Valeur &a{key} &7définie sur &a{value}&7.'
+set-usage: '&7&l« &e&lSH &8&l» &7Utilisation : &e/shjumppads set <power|angle|direction|particle|permission> <valeur|none>&7.'
+# {count} : nombre de plaques
+reloaded: '&7&l« &a&lSH &8&l» &7Configuration &arechargée &7({count} plaques).'
+# {file} : fichier en erreur, {error} : première ligne de l'erreur
+reload-failed: '&7&l« &c&lSH &8&l» &7Rechargement annulé, erreur dans &c{file} &7: &c{error}&7. L''ancienne configuration reste active.'
+list-header: '&7&l« &e&lSH &8&l» &7Plaques de saut (&e{count}&7) :'
+list-line: '&8• &7{world} &e{x} {y} {z} &8(&7puissance {power}, angle {angle}°&8)'
+info: '&7&l« &e&lSH &8&l» &7Plaque &e{world} {x} {y} {z}&7 : bloc &e{plate}&7, puissance &e{power}&7, angle &e{angle}°&7, direction &e{direction}&7, particule &e{particle}&7.'

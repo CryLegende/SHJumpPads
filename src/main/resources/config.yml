@@ -1,10 +1,35 @@
 # SHJumpPads - plaques de saut
-# Les plaques sont stockées dans jumppads.yml (même format que l'ancien plugin JumpPads,
-# qui est importé automatiquement au premier démarrage s'il est présent).
+#
+# Les plaques sont stockées dans jumppads.yml (même format que l'ancien plugin JumpPads, qui est importé
+# automatiquement au premier démarrage s'il est présent). Les textes sont dans messages.yml.
+# Une plaque se pose sur une plaque de pression ou un bloc de slime ; le joueur qui marche dessus est lancé.
+# Chaque plaque peut exiger une permission (champ permission de jumppads.yml, réglé par /shjumppads set permission),
+# par exemple shjumppads.pad.vip : le nom est libre et la permission est vérifiée en plus de shjumppads.use.
+#
+# Commandes (alias : /shjp) :
+#   /shjumppads create [puissance] [angle] [direction|auto|here]   Crée une plaque sur le bloc visé ou sous vos pieds.
+#   /shjumppads delete                                             Supprime la plaque visée.
+#   /shjumppads set <power|angle|direction|particle|permission> <valeur|none>   Modifie la plaque visée.
+#   /shjumppads info                                               Affiche les réglages de la plaque visée.
+#   /shjumppads list                                               Liste les plaques (50 au maximum).
+#   /shjumppads reload                                             Recharge config.yml et messages.yml.
+#                                                                  jumppads.yml n'est pas relu : les plaques en mémoire
+#                                                                  font foi (il l'est seulement s'il était illisible au
+#                                                                  démarrage). Une erreur de syntaxe annule le rechargement.
+#   create, delete, set et info demandent un joueur ; list et reload marchent aussi en console.
+#
+# Permissions :
+#   shjumppads.use              Être lancé par une plaque (tout le monde par défaut).
+#   shjumppads.bypass.maxpower  Dépasser max-power à la création et à la modification (op par défaut).
+#   shjumppads.admin            Toute l'administration (op par défaut).
+#   shjumppads.admin.create     create.
+#   shjumppads.admin.delete     delete.
+#   shjumppads.admin.set        set.
+#   shjumppads.admin.info       info.
+#   shjumppads.admin.list       list.
+#   shjumppads.admin.reload     reload.
 
-prefix: '&7&l« &a&lSH &8&l» &7'
-
-# Puissance maximale autorisée à la création (sauf permission shjumppads.maxpower.bypass)
+# Puissance maximale autorisée à la création (sauf permission shjumppads.bypass.maxpower)
 max-power: 50
 # Sans direction fixée sur la plaque, le joueur part dans le sens où il marche
 launch-in-walking-direction: true
@@ -41,22 +66,3 @@ launch-effect:
 
 # Supprime la plaque quand son bloc est cassé
 clean-up: true
-
-messages:
-  no-permission: '&7Vous n''avez pas la permission.'
-  player-only: '&7Commande réservée aux &cjoueurs&7.'
-  usage: '&7Utilisation : &e/shjp <create|delete|set|info|list|reload>'
-  not-a-pad: '&7Le bloc visé n''est &cpas une plaque de saut&7.'
-  invalid-target: '&7Une plaque de saut se pose sur une &cplaque de pression &7ou un &cbloc de slime&7.'
-  already-exists: '&7Il y a déjà une plaque de saut &cici&7.'
-  invalid-number: '&c{value} &7n''est pas un nombre valide.'
-  max-power: '&7Vous ne pouvez pas dépasser une puissance de &c{max}&7.'
-  created: '&7Plaque de saut &acréée &7(puissance &a{power}&7, angle &a{angle}°&7).'
-  deleted: '&7Plaque de saut &asupprimée&7.'
-  broken: '&7Plaque de saut &csupprimée &7(bloc cassé).'
-  set: '&7Valeur &a{key} &7définie sur &a{value}&7.'
-  set-usage: '&7Utilisation : &e/shjp set <power|angle|direction|particle|permission> <valeur|none>'
-  reloaded: '&7Configuration &arechargée &7({count} plaques).'
-  list-header: '&7Plaques de saut (&e{count}&7) :'
-  list-line: '&8• &7{world} &e{x} {y} {z} &8(&7puissance {power}, angle {angle}°&8)'
-  info: '&7Plaque &e{world} {x} {y} {z}&7 : bloc &e{plate}&7, puissance &e{power}&7, angle &e{angle}°&7, direction &e{direction}&7, particule &e{particle}&7.'
